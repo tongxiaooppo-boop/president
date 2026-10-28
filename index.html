@@ -42,6 +42,7 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.92em}
 .tab:hover{border-color:var(--accent)}
 .tab[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
 .tab:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.levels .tab{font-weight:700}
 .tabsep{width:1px;background:var(--line);margin:0 4px}
 .nat{display:flex;flex-wrap:wrap;gap:6px 18px;background:var(--accent-soft);border-radius:6px;padding:10px 14px;margin:0 0 14px;font-size:14px}
 .nat b{font-weight:700}
@@ -83,6 +84,7 @@ footer a{color:var(--accent)}
   </details>
 
   <p id="status" role="status">準備讀取中選會資料…</p>
+  <div class="tabs levels" id="levels" aria-label="統計單位" hidden></div>
   <div class="tabs" id="tabs" role="tablist" aria-label="選擇範圍" hidden></div>
   <div id="nat" class="nat" hidden></div>
   <div class="tools" id="tools" hidden>
@@ -171,11 +173,15 @@ async function loadElection(year){
   return {year,cands,towns};
 }
 
-let ELECTIONS = {}, TOWN_LIST = [], VIEW = 'avg', N = 5;
+let ELECTIONS = {}, LISTS = {}, VIEW = 'avg', N = 5, LEVEL = 'town';
 
-// hash 格式：avg5（最近 5 屆平均）、y2024（單屆）
+// hash 格式：avg5（最近 5 屆平均）、y2024（單屆）；前綴 c- 代表縣市層級，例如 c-avg5
+function hashOf(){ return (LEVEL==='county'?'c-':'') + (VIEW==='avg'?'avg'+N:VIEW); }
 function parseHash(){
-  const h = location.hash.slice(1), m = /^avg([1-7])$/.exec(h);
+  let h = location.hash.slice(1);
+  LEVEL = h.startsWith('c-') ? 'county' : 'town';
+  if(LEVEL==='county') h = h.slice(2);
+  const m = /^avg([1-7])$/.exec(h);
   if(m){ VIEW='avg'; N=+m[1]; return true; }
   if(views().some(v=>v&&v.id===h)){ VIEW=h; return true; }
   return false;
@@ -187,24 +193,36 @@ function compute(){
     const E = ELECTIONS[y];
     const natTotal = E.cands.reduce((s,c)=>s+c.votes,0);
     E.natShare = {}; E.cands.forEach(c=>E.natShare[c.no]=c.votes/natTotal*100);
-    E.rows = [];
+    // 縣市 = 該縣市各鄉鎮得票數加總
+    const cmap = new Map();
     for(const t of E.towns.values()){
-      const tot = E.cands.reduce((s,c)=>s+(t.votes[c.no]||0),0);
-      const share = {}; let d = 0;
-      for(const c of E.cands){ share[c.no] = (t.votes[c.no]||0)/tot*100; d += Math.abs(share[c.no]-E.natShare[c.no]); }
-      E.rows.push({key:t.key,county:t.county,name:t.name,share,dev:d/2,votes:tot});
+      let c = cmap.get(t.county);
+      if(!c){ c = {key:t.county,county:'',name:t.county,votes:{}}; cmap.set(t.county,c); }
+      for(const k in t.votes) c.votes[k] = (c.votes[k]||0) + t.votes[k];
     }
-    E.rows.sort((a,b)=>a.dev-b.dev);
-    E.rows.forEach((r,i)=>{r.rank=i+1; r.score=100-r.dev;});
-    E.byKey = new Map(E.rows.map(r=>[r.key,r]));
+    E.town = rankUnits(E, E.towns);
+    E.county = rankUnits(E, cmap);
   }
-  const latest = ELECTIONS[2024].rows;
-  TOWN_LIST = latest.map(r=>({key:r.key,county:r.county,name:r.name}));
+  for(const lv of ['town','county'])
+    LISTS[lv] = ELECTIONS[2024][lv].rows.map(r=>({key:r.key,county:r.county,name:r.name}));
+}
+
+function rankUnits(E, units){
+  const rows = [];
+  for(const t of units.values()){
+    const tot = E.cands.reduce((s,c)=>s+(t.votes[c.no]||0),0);
+    const share = {}; let d = 0;
+    for(const c of E.cands){ share[c.no] = (t.votes[c.no]||0)/tot*100; d += Math.abs(share[c.no]-E.natShare[c.no]); }
+    rows.push({key:t.key,county:t.county,name:t.name,share,dev:d/2,votes:tot});
+  }
+  rows.sort((a,b)=>a.dev-b.dev);
+  rows.forEach((r,i)=>{r.rank=i+1; r.score=100-r.dev;});
+  return {rows, byKey:new Map(rows.map(r=>[r.key,r]))};
 }
 
 function avgRows(years){
-  const rows = TOWN_LIST.map(t=>{
-    const devs = years.map(y=>ELECTIONS[y].byKey.get(t.key).dev);
+  const rows = LISTS[LEVEL].map(t=>{
+    const devs = years.map(y=>ELECTIONS[y][LEVEL].byKey.get(t.key).dev);
     const mean = devs.reduce((a,b)=>a+b,0)/devs.length;
     return {...t,devs,dev:mean,score:100-mean,max:Math.max(...devs)};
   }).sort((a,b)=>a.dev-b.dev);
@@ -230,7 +248,18 @@ function buildTabs(){
     const b = document.createElement('button');
     b.className='tab'; b.type='button'; b.role='tab'; b.dataset.id=v.id; b.textContent=v.label;
     b.setAttribute('aria-selected', v.id===VIEW);
-    b.onclick = ()=>{ VIEW=v.id; location.hash=v.id==='avg'?'avg'+N:v.id; render(); };
+    b.onclick = ()=>{ VIEW=v.id; location.hash=hashOf(); render(); };
+    el.appendChild(b);
+  }
+  el.hidden=false;
+}
+
+function buildLevels(){
+  const el = $('levels'); el.innerHTML='';
+  for(const [id,label] of [['town','依鄉鎮市區（368）'],['county','依縣市（22）']]){
+    const b = document.createElement('button');
+    b.className='tab'; b.type='button'; b.dataset.id=id; b.textContent=label;
+    b.onclick = ()=>{ LEVEL=id; location.hash=hashOf(); render(); };
     el.appendChild(b);
   }
   el.hidden=false;
@@ -238,7 +267,7 @@ function buildTabs(){
 
 function buildCounties(){
   const s = $('county');
-  const list = [...new Set(TOWN_LIST.map(t=>t.county))];
+  const list = [...new Set(LISTS.town.map(t=>t.county))];
   s.innerHTML = '<option value="">全部縣市</option>'+list.map(c=>`<option>${esc(c)}</option>`).join('');
 }
 
@@ -249,7 +278,11 @@ function buildN(){
 }
 
 function render(){
-  document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected', b.dataset.id===VIEW));
+  document.querySelectorAll('#tabs .tab').forEach(b=>b.setAttribute('aria-selected', b.dataset.id===VIEW));
+  document.querySelectorAll('#levels .tab').forEach(b=>b.setAttribute('aria-selected', b.dataset.id===LEVEL));
+  const isCounty = LEVEL==='county', unit = isCounty?'縣市':'鄉鎮';
+  $('county').hidden = isCounty; if(isCounty) $('county').value='';
+  $('q').placeholder = isCounty ? '搜尋縣市，例如 苗栗' : '搜尋鄉鎮，例如 通霄';
   const q = $('q').value.trim(), cty = $('county').value;
   const v = views().find(x=>x&&x.id===VIEW);
   $('nwrap').hidden = VIEW!=='avg'; $('nsel').value = N;
@@ -260,27 +293,28 @@ function render(){
     const rows = avgRows(v.years);
     const y0 = v.years[0], y1 = v.years[v.years.length-1];
     natEl.innerHTML = `<span>最近 ${N} 屆平均（${y0===y1?y0:y0+'–'+y1}）：各屆差距取平均，得分越高越像全國</span>`;
-    head = `<tr><th>名次</th><th>鄉鎮市區</th>${v.years.map(y=>`<th>${y}</th>`).join('')}<th>平均差距</th><th>得分</th></tr>`;
+    head = `<tr><th>名次</th><th>${isCounty?'縣市':'鄉鎮市區'}</th>${v.years.map(y=>`<th>${y}</th>`).join('')}<th>平均差距</th><th>得分</th></tr>`;
     const shown = rows.filter(match); n = shown.length;
     body = shown.map(r=>`<tr class="${r.rank<=3?'top':''}"><td>${r.rank}</td>
-      <td class="name">${esc(r.name)}<small>${esc(r.county)}</small></td>
+      <td class="name">${esc(r.name)}${r.county?`<small>${esc(r.county)}</small>`:''}</td>
       ${r.devs.map(d=>`<td>${fmt(d)}</td>`).join('')}
       <td>${fmt(r.dev)}</td>
       <td><div class="score"><i style="width:${Math.max(2,(r.score-85)*6)}px"></i><b>${fmt(r.score)}</b></div></td></tr>`).join('');
   } else {
     const E = ELECTIONS[v.year];
+    const U = E[LEVEL];
     natEl.innerHTML = `<span><b>${v.year} 全國</b></span>` + E.cands.map(c=>`<span>${esc(c.name)} <b>${fmt(E.natShare[c.no])}%</b></span>`).join('');
-    head = `<tr><th>名次</th><th>鄉鎮市區</th>${E.cands.map(c=>`<th>${esc(c.name)} %</th>`).join('')}<th>差距</th><th>得分</th></tr>`;
-    const shown = E.rows.filter(match); n = shown.length;
+    head = `<tr><th>名次</th><th>${isCounty?'縣市':'鄉鎮市區'}</th>${E.cands.map(c=>`<th>${esc(c.name)} %</th>`).join('')}<th>差距</th><th>得分</th></tr>`;
+    const shown = U.rows.filter(match); n = shown.length;
     body = shown.map(r=>`<tr class="${r.rank<=3?'top':''}"><td>${r.rank}</td>
-      <td class="name">${esc(r.name)}<small>${esc(r.county)}</small></td>
+      <td class="name">${esc(r.name)}${r.county?`<small>${esc(r.county)}</small>`:''}</td>
       ${E.cands.map(c=>`<td>${fmt(r.share[c.no])}</td>`).join('')}
       <td>${fmt(r.dev)}</td>
       <td><div class="score"><i style="width:${Math.max(2,(r.score-85)*6)}px"></i><b>${fmt(r.score)}</b></div></td></tr>`).join('');
   }
   natEl.hidden=false;
-  $('box').innerHTML = `<table><thead>${head}</thead><tbody>${body||'<tr><td colspan="9" class="loading">沒有符合的鄉鎮</td></tr>'}</tbody></table>`;
-  $('count').textContent = `${n} 個鄉鎮`;
+  $('box').innerHTML = `<table><thead>${head}</thead><tbody>${body||'<tr><td colspan="9" class="loading">沒有符合的項目</td></tr>'}</tbody></table>`;
+  $('count').textContent = `${n} 個${unit}`;
 }
 
 async function main(){
@@ -289,11 +323,11 @@ async function main(){
     res.forEach(e=>ELECTIONS[e.year]=e);
     compute();
     parseHash();
-    buildTabs(); buildCounties(); buildN();
+    buildLevels(); buildTabs(); buildCounties(); buildN();
     $('tools').hidden=false;
     $('q').addEventListener('input',render);
     $('county').addEventListener('change',render);
-    $('nsel').addEventListener('change',()=>{ N=+$('nsel').value; location.hash='avg'+N; });
+    $('nsel').addEventListener('change',()=>{ N=+$('nsel').value; location.hash=hashOf(); });
     window.addEventListener('hashchange',()=>{ if(parseHash()) render(); });
     statusEl.textContent='';
     render();
