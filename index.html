@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>最像全國的鄉鎮</title>
+<meta name="description" content="2000–2024 總統大選，各鄉鎮市區得票率與全國結果的接近程度排行">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@700;900&display=swap">
+<style>
+/* Layout: 單欄閱讀，上方分頁籤切換「平均／各屆」，下方為可搜尋的排行表 */
+:root{
+  --bg:#f6f7f5; --surface:#ffffff; --fg:#1d2624; --muted:#66726f; --line:#dde3e0;
+  --accent:#0b6b63; --accent-soft:#d9efeb; --bar:#2f9488; --warn:#b4531f;
+  --serif:"Noto Serif TC","Songti TC","PMingLiU",serif;
+  --sans:"Noto Sans TC",-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#101614; --surface:#18211f; --fg:#e6ece9; --muted:#93a29e; --line:#2a3633;
+    --accent:#52c2b5; --accent-soft:#193631; --bar:#3fae9f; --warn:#e69561; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101614; --surface:#18211f; --fg:#e6ece9; --muted:#93a29e; --line:#2a3633;
+  --accent:#52c2b5; --accent-soft:#193631; --bar:#3fae9f; --warn:#e69561; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 var(--sans);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1040px;margin:0 auto;padding-block:28px 56px}
+h1{font:900 clamp(28px,5vw,40px)/1.2 var(--serif);margin:0 0 10px;text-wrap:balance}
+.lead{color:var(--muted);margin:0 0 20px;max-width:46em}
+details{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px 14px;margin:0 0 20px}
+summary{cursor:pointer;font-weight:500}
+details p{margin:8px 0 0;color:var(--muted)}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.92em}
+#status{font-size:13px;color:var(--muted);margin:0 0 12px;min-height:1.5em}
+#status.err{color:var(--warn)}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 16px}
+.tab{font:inherit;font-size:14px;padding:6px 12px;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:4px;cursor:pointer}
+.tab:hover{border-color:var(--accent)}
+.tab[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.tab:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tabsep{width:1px;background:var(--line);margin:0 4px}
+.nat{display:flex;flex-wrap:wrap;gap:6px 18px;background:var(--accent-soft);border-radius:6px;padding:10px 14px;margin:0 0 14px;font-size:14px}
+.nat b{font-weight:700}
+.tools{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 12px}
+.tools input,.tools select{font:inherit;font-size:14px;padding:6px 10px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--fg);min-width:0}
+.tools input{flex:1 1 180px}
+.count{align-self:center;font-size:13px;color:var(--muted)}
+.tablebox{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:560px;font-variant-numeric:tabular-nums}
+th,td{padding:7px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
+th{position:sticky;top:0;background:var(--surface);font-size:13px;font-weight:500;color:var(--muted);text-align:right}
+th:nth-child(2),td:nth-child(2),th:first-child,td:first-child{text-align:left}
+td:first-child{color:var(--muted);width:3.2em}
+td.name{font-weight:500}
+td.name small{color:var(--muted);font-weight:400;margin-left:6px}
+tr:last-child td{border-bottom:0}
+.score{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+.score i{display:block;height:6px;border-radius:3px;background:var(--bar);min-width:2px}
+.score b{min-width:3.6em;font-weight:700}
+tr.top td{background:color-mix(in srgb,var(--accent-soft) 55%,transparent)}
+footer{margin-top:28px;color:var(--muted);font-size:13px}
+footer a{color:var(--accent)}
+.loading{padding:28px;text-align:center;color:var(--muted)}
+@media (prefers-reduced-motion:no-preference){.score i{transition:width .25s}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>最像全國的鄉鎮</h1>
+  <p class="lead">2000 到 2024 年七屆總統大選，哪個鄉鎮市區的得票結構最接近全國？每一屆分開計分，也可看多屆平均。</p>
+
+  <details>
+    <summary>得分怎麼算</summary>
+    <p>差距＝各組候選人「鄉鎮得票率 − 全國得票率」取絕對值後加總，再除以 2，單位是百分點。<br>
+    得分＝100 − 差距，滿分 100 代表和全國完全一樣。多屆平均是把各屆差距平均後再換算得分。<br>
+    縣市合併前的鄉鎮對應到現在的行政區（如臺北縣板橋市算新北市板橋區）；2000 年臺南市中區與西區合併為中西區；2000、2004 年高雄縣三民鄉對應那瑪夏區。共 368 個鄉鎮市區。</p>
+  </details>
+
+  <p id="status" role="status">準備讀取中選會資料…</p>
+  <div class="tabs" id="tabs" role="tablist" aria-label="選擇範圍" hidden></div>
+  <div id="nat" class="nat" hidden></div>
+  <div class="tools" id="tools" hidden>
+    <input id="q" type="search" placeholder="搜尋鄉鎮，例如 通霄" aria-label="搜尋鄉鎮">
+    <select id="county" aria-label="縣市"></select>
+    <span class="count" id="count"></span>
+  </div>
+  <div class="tablebox" id="box"><div class="loading">讀取中…</div></div>
+
+  <footer>
+    資料來源：<a href="https://db.cec.gov.tw/ElecTable/Election?type=President" target="_blank" rel="noopener">中央選舉委員會選舉資料庫</a>，頁面開啟時直接向該網站讀取。
+  </footer>
+</div>
+
+<script>
+const BASE = 'https://db.cec.gov.tw/static/elections/data/tickets/ELC/P0/00/';
+const THEMES = {
+  2000:'bc69efc4ab84479137e749aac2078116', 2004:'38b0ef91b5866696f58891ecf69cb3c7',
+  2008:'54deeba50d3cc135f45018059c0cb062', 2012:'fddf766f2a250a2e3688d644fda346d2',
+  2016:'61b4dda0ebac3332203ef3729a9a0ada', 2020:'1f7d9f4f6bfe06fdaf4db7df2ed4d60c',
+  2024:'4d83db17c1707e3defae5dc4d4e9c800'
+};
+const YEARS = Object.keys(THEMES).map(Number);
+const CMAP = {'臺北縣':'新北市','桃園縣':'桃園市','臺中縣':'臺中市','臺南縣':'臺南市','高雄縣':'高雄市'};
+const nz = s => s.replace(/台/g,'臺').trim();
+const $ = id => document.getElementById(id);
+const statusEl = $('status');
+
+// 同時最多 10 個請求
+const queue = []; let active = 0;
+function limited(fn){
+  return new Promise((res,rej)=>{ queue.push({fn,res,rej}); pump(); });
+}
+function pump(){
+  while(active<10 && queue.length){
+    const {fn,res,rej} = queue.shift(); active++;
+    fn().then(res,rej).finally(()=>{active--; pump();});
+  }
+}
+async function getJSON(url){
+  for(let i=0;i<3;i++){
+    try{
+      const r = await fetch(url);
+      if(!r.ok) throw new Error(r.status+' '+url);
+      return await r.json();
+    }catch(e){ if(i===2) throw e; await new Promise(r=>setTimeout(r,400*(i+1))); }
+  }
+}
+const fetchJ = u => limited(()=>getJSON(u));
+
+let done = 0, total = 0;
+function tick(){ done++; statusEl.textContent = `讀取中選會資料… ${done}/${total}`; }
+
+async function loadElection(year){
+  const base = BASE + THEMES[year] + '/';
+  const [nat, cl] = await Promise.all([
+    fetchJ(base+'N/00_000_00_000_0000.json'),
+    fetchJ(base+'C/00_000_00_000_0000.json')
+  ]);
+  const natRows = nat['00_000_00_000_0000'].filter(a=>a.is_vice!=='Y');
+  const cands = natRows.map(a=>({no:a.cand_no,name:a.cand_name,party:a.party_name,votes:a.ticket_num}));
+  const counties = [...new Map(cl['00_000_00_000_0000'].map(a=>[a.prv_code+'_'+a.city_code,a.area_name])).entries()];
+  total += counties.length;
+  const parts = await Promise.all(counties.map(async([k,nm])=>{
+    const [p,c] = k.split('_');
+    const j = await fetchJ(`${base}D/${p}_${c}_00_000_0000.json`);
+    tick();
+    return {nm, rows:Object.values(j).flat()};
+  }));
+  const towns = new Map();
+  for(const {nm,rows} of parts){
+    for(const a of rows){
+      if(a.is_vice==='Y') continue;
+      let county = nz(nm), name = nz(a.area_name);
+      if(county==='高雄縣' && name==='三民鄉') name='那瑪夏區';
+      if(county==='臺南市' && (name==='中區'||name==='西區')) name='中西區';
+      county = CMAP[county] || county;
+      const key = county+'|'+name.slice(0,-1);
+      let t = towns.get(key);
+      if(!t){ t = {key,county,name,votes:{}}; towns.set(key,t); }
+      t.name = name;
+      t.votes[a.cand_no] = (t.votes[a.cand_no]||0) + a.ticket_num;
+    }
+  }
+  return {year,cands,towns};
+}
+
+let ELECTIONS = {}, TOWN_LIST = [], VIEW = 'avg7';
+
+function compute(){
+  // 每屆：各鄉鎮得票率、差距、得分、名次
+  for(const y of YEARS){
+    const E = ELECTIONS[y];
+    const natTotal = E.cands.reduce((s,c)=>s+c.votes,0);
+    E.natShare = {}; E.cands.forEach(c=>E.natShare[c.no]=c.votes/natTotal*100);
+    E.rows = [];
+    for(const t of E.towns.values()){
+      const tot = E.cands.reduce((s,c)=>s+(t.votes[c.no]||0),0);
+      const share = {}; let d = 0;
+      for(const c of E.cands){ share[c.no] = (t.votes[c.no]||0)/tot*100; d += Math.abs(share[c.no]-E.natShare[c.no]); }
+      E.rows.push({key:t.key,county:t.county,name:t.name,share,dev:d/2,votes:tot});
+    }
+    E.rows.sort((a,b)=>a.dev-b.dev);
+    E.rows.forEach((r,i)=>{r.rank=i+1; r.score=100-r.dev;});
+    E.byKey = new Map(E.rows.map(r=>[r.key,r]));
+  }
+  const latest = ELECTIONS[2024].rows;
+  TOWN_LIST = latest.map(r=>({key:r.key,county:r.county,name:r.name}));
+}
+
+function avgRows(years){
+  const rows = TOWN_LIST.map(t=>{
+    const devs = years.map(y=>ELECTIONS[y].byKey.get(t.key).dev);
+    const mean = devs.reduce((a,b)=>a+b,0)/devs.length;
+    return {...t,devs,dev:mean,score:100-mean,max:Math.max(...devs)};
+  }).sort((a,b)=>a.dev-b.dev);
+  rows.forEach((r,i)=>r.rank=i+1);
+  return rows;
+}
+
+const fmt = (n,d=2)=>n.toFixed(d);
+const esc = s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function views(){
+  return [
+    {id:'avg7',label:'七屆平均',years:YEARS},
+    {id:'avg5',label:'2008–2024 五屆平均',years:YEARS.filter(y=>y>=2008)},
+    null,
+    ...YEARS.slice().reverse().map(y=>({id:'y'+y,label:y+'年',year:y}))
+  ];
+}
+
+function buildTabs(){
+  const el = $('tabs'); el.innerHTML='';
+  for(const v of views()){
+    if(!v){ const s=document.createElement('span'); s.className='tabsep'; el.appendChild(s); continue; }
+    const b = document.createElement('button');
+    b.className='tab'; b.type='button'; b.role='tab'; b.dataset.id=v.id; b.textContent=v.label;
+    b.setAttribute('aria-selected', v.id===VIEW);
+    b.onclick = ()=>{ VIEW=v.id; location.hash=v.id; render(); };
+    el.appendChild(b);
+  }
+  el.hidden=false;
+}
+
+function buildCounties(){
+  const s = $('county');
+  const list = [...new Set(TOWN_LIST.map(t=>t.county))];
+  s.innerHTML = '<option value="">全部縣市</option>'+list.map(c=>`<option>${esc(c)}</option>`).join('');
+}
+
+function render(){
+  document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected', b.dataset.id===VIEW));
+  const q = $('q').value.trim(), cty = $('county').value;
+  const v = views().find(x=>x&&x.id===VIEW);
+  const match = r => (!cty||r.county===cty) && (!q||(r.county+r.name).includes(q));
+  const natEl = $('nat'); let head='', body='', n=0;
+
+  if(v.years){
+    const rows = avgRows(v.years);
+    natEl.innerHTML = `<span>${esc(v.label)}：各屆差距取平均，得分越高越像全國</span>`;
+    head = `<tr><th>名次</th><th>鄉鎮市區</th>${v.years.map(y=>`<th>${y}</th>`).join('')}<th>平均差距</th><th>得分</th></tr>`;
+    const shown = rows.filter(match); n = shown.length;
+    body = shown.map(r=>`<tr class="${r.rank<=3?'top':''}"><td>${r.rank}</td>
+      <td class="name">${esc(r.name)}<small>${esc(r.county)}</small></td>
+      ${r.devs.map(d=>`<td>${fmt(d)}</td>`).join('')}
+      <td>${fmt(r.dev)}</td>
+      <td><div class="score"><i style="width:${Math.max(2,(r.score-85)*6)}px"></i><b>${fmt(r.score)}</b></div></td></tr>`).join('');
+  } else {
+    const E = ELECTIONS[v.year];
+    natEl.innerHTML = `<span><b>${v.year} 全國</b></span>` + E.cands.map(c=>`<span>${esc(c.name)} <b>${fmt(E.natShare[c.no])}%</b></span>`).join('');
+    head = `<tr><th>名次</th><th>鄉鎮市區</th>${E.cands.map(c=>`<th>${esc(c.name)} %</th>`).join('')}<th>差距</th><th>得分</th></tr>`;
+    const shown = E.rows.filter(match); n = shown.length;
+    body = shown.map(r=>`<tr class="${r.rank<=3?'top':''}"><td>${r.rank}</td>
+      <td class="name">${esc(r.name)}<small>${esc(r.county)}</small></td>
+      ${E.cands.map(c=>`<td>${fmt(r.share[c.no])}</td>`).join('')}
+      <td>${fmt(r.dev)}</td>
+      <td><div class="score"><i style="width:${Math.max(2,(r.score-85)*6)}px"></i><b>${fmt(r.score)}</b></div></td></tr>`).join('');
+  }
+  natEl.hidden=false;
+  $('box').innerHTML = `<table><thead>${head}</thead><tbody>${body||'<tr><td colspan="9" class="loading">沒有符合的鄉鎮</td></tr>'}</tbody></table>`;
+  $('count').textContent = `${n} 個鄉鎮`;
+}
+
+async function main(){
+  try{
+    const res = await Promise.all(YEARS.map(loadElection));
+    res.forEach(e=>ELECTIONS[e.year]=e);
+    compute();
+    const h = location.hash.slice(1);
+    if(views().some(v=>v&&v.id===h)) VIEW=h;
+    buildTabs(); buildCounties();
+    $('tools').hidden=false;
+    $('q').addEventListener('input',render);
+    $('county').addEventListener('change',render);
+    window.addEventListener('hashchange',()=>{const h=location.hash.slice(1); if(views().some(v=>v&&v.id===h)){VIEW=h;render();}});
+    statusEl.textContent='';
+    render();
+  }catch(e){
+    statusEl.className='err';
+    statusEl.textContent='讀取中選會資料失敗：'+e.message+'。請重新整理頁面再試一次。';
+    $('box').innerHTML='';
+  }
+}
+main();
+</script>
+</body>
+</html>
