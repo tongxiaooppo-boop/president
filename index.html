@@ -46,6 +46,8 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.92em}
 .nat{display:flex;flex-wrap:wrap;gap:6px 18px;background:var(--accent-soft);border-radius:6px;padding:10px 14px;margin:0 0 14px;font-size:14px}
 .nat b{font-weight:700}
 .tools{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 12px}
+.nwrap[hidden]{display:none}
+.nwrap{display:flex;align-items:center;gap:6px;font-size:14px}
 .tools input,.tools select{font:inherit;font-size:14px;padding:6px 10px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--fg);min-width:0}
 .tools input{flex:1 1 180px}
 .count{align-self:center;font-size:13px;color:var(--muted)}
@@ -84,6 +86,7 @@ footer a{color:var(--accent)}
   <div class="tabs" id="tabs" role="tablist" aria-label="選擇範圍" hidden></div>
   <div id="nat" class="nat" hidden></div>
   <div class="tools" id="tools" hidden>
+    <label id="nwrap" class="nwrap">平均最近 <select id="nsel" aria-label="平均屆數"></select> 屆</label>
     <input id="q" type="search" placeholder="搜尋鄉鎮，例如 通霄" aria-label="搜尋鄉鎮">
     <select id="county" aria-label="縣市"></select>
     <span class="count" id="count"></span>
@@ -168,7 +171,15 @@ async function loadElection(year){
   return {year,cands,towns};
 }
 
-let ELECTIONS = {}, TOWN_LIST = [], VIEW = 'avg7';
+let ELECTIONS = {}, TOWN_LIST = [], VIEW = 'avg', N = 5;
+
+// hash 格式：avg5（最近 5 屆平均）、y2024（單屆）
+function parseHash(){
+  const h = location.hash.slice(1), m = /^avg([1-7])$/.exec(h);
+  if(m){ VIEW='avg'; N=+m[1]; return true; }
+  if(views().some(v=>v&&v.id===h)){ VIEW=h; return true; }
+  return false;
+}
 
 function compute(){
   // 每屆：各鄉鎮得票率、差距、得分、名次
@@ -206,8 +217,7 @@ const esc = s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;
 
 function views(){
   return [
-    {id:'avg7',label:'七屆平均',years:YEARS},
-    {id:'avg5',label:'2008–2024 五屆平均',years:YEARS.filter(y=>y>=2008)},
+    {id:'avg',label:'多屆平均',years:YEARS.slice(-N)},
     null,
     ...YEARS.slice().reverse().map(y=>({id:'y'+y,label:y+'年',year:y}))
   ];
@@ -220,7 +230,7 @@ function buildTabs(){
     const b = document.createElement('button');
     b.className='tab'; b.type='button'; b.role='tab'; b.dataset.id=v.id; b.textContent=v.label;
     b.setAttribute('aria-selected', v.id===VIEW);
-    b.onclick = ()=>{ VIEW=v.id; location.hash=v.id; render(); };
+    b.onclick = ()=>{ VIEW=v.id; location.hash=v.id==='avg'?'avg'+N:v.id; render(); };
     el.appendChild(b);
   }
   el.hidden=false;
@@ -232,16 +242,24 @@ function buildCounties(){
   s.innerHTML = '<option value="">全部縣市</option>'+list.map(c=>`<option>${esc(c)}</option>`).join('');
 }
 
+function buildN(){
+  const s = $('nsel');
+  s.innerHTML = [1,2,3,4,5,6,7].map(n=>`<option value="${n}">${n}</option>`).join('');
+  s.value = N;
+}
+
 function render(){
   document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected', b.dataset.id===VIEW));
   const q = $('q').value.trim(), cty = $('county').value;
   const v = views().find(x=>x&&x.id===VIEW);
+  $('nwrap').hidden = VIEW!=='avg'; $('nsel').value = N;
   const match = r => (!cty||r.county===cty) && (!q||(r.county+r.name).includes(q));
   const natEl = $('nat'); let head='', body='', n=0;
 
   if(v.years){
     const rows = avgRows(v.years);
-    natEl.innerHTML = `<span>${esc(v.label)}：各屆差距取平均，得分越高越像全國</span>`;
+    const y0 = v.years[0], y1 = v.years[v.years.length-1];
+    natEl.innerHTML = `<span>最近 ${N} 屆平均（${y0===y1?y0:y0+'–'+y1}）：各屆差距取平均，得分越高越像全國</span>`;
     head = `<tr><th>名次</th><th>鄉鎮市區</th>${v.years.map(y=>`<th>${y}</th>`).join('')}<th>平均差距</th><th>得分</th></tr>`;
     const shown = rows.filter(match); n = shown.length;
     body = shown.map(r=>`<tr class="${r.rank<=3?'top':''}"><td>${r.rank}</td>
@@ -270,13 +288,13 @@ async function main(){
     const res = await Promise.all(YEARS.map(loadElection));
     res.forEach(e=>ELECTIONS[e.year]=e);
     compute();
-    const h = location.hash.slice(1);
-    if(views().some(v=>v&&v.id===h)) VIEW=h;
-    buildTabs(); buildCounties();
+    parseHash();
+    buildTabs(); buildCounties(); buildN();
     $('tools').hidden=false;
     $('q').addEventListener('input',render);
     $('county').addEventListener('change',render);
-    window.addEventListener('hashchange',()=>{const h=location.hash.slice(1); if(views().some(v=>v&&v.id===h)){VIEW=h;render();}});
+    $('nsel').addEventListener('change',()=>{ N=+$('nsel').value; location.hash='avg'+N; });
+    window.addEventListener('hashchange',()=>{ if(parseHash()) render(); });
     statusEl.textContent='';
     render();
   }catch(e){
